@@ -27,17 +27,12 @@ server.timeout = 60000;
 // Trust proxy for proper IP detection (only trust first proxy)
 app.set('trust proxy', 1);
 
-// Security middleware
+// Security middleware - Relaxed for development/open access
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      connectSrc: ["'self'", "ws:", "wss:"]
-    }
-  }
+  contentSecurityPolicy: false, // Disable CSP to allow all connections
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
 app.use(compression());
@@ -56,12 +51,16 @@ const limiter = rateLimit({
 
 app.use('/api/', limiter);
 
-// CORS configuration
+// CORS configuration - Allow all origins
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  origin: '*', // Allow all origins
+  credentials: false, // Must be false when origin is '*'
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+  allowedHeaders: '*', // Allow all headers
+  exposedHeaders: '*', // Expose all headers
+  maxAge: 86400, // Cache preflight requests for 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
 // Body parsing middleware
