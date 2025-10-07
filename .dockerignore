@@ -1,0 +1,40 @@
+
+# Node modules (we install them inside Docker)
+node_modules
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Local environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# TypeScript build output
+dist
+build
+
+# Logs
+logs
+*.log
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.idea
+.vscode
+*.swp
+
+# Git
+.git
+.gitignore
+
+# Dockerfile itself (optional)
+Dockerfile
+.dockerignore
+
+# Optional: temporary directories
+tmp
+temp
