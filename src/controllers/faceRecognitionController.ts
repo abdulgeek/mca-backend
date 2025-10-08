@@ -15,13 +15,23 @@ import { generateWhatsAppLink, generateAbsenceMessage } from '../utils/whatsapp'
 
 export const enrollStudent = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, phone, course, faceImage }: EnrollStudentRequest = req.body;
+    const { name, email, phone, course, faceImage, fingerprintData }: EnrollStudentRequest = req.body;
     
     // Validate required fields
-    if (!name || !email || !phone || !course || !faceImage) {
+    if (!name || !email || !phone || !course) {
       const response: ApiResponse = {
         success: false,
-        message: 'Missing required fields: name, email, phone, course, and faceImage are required'
+        message: 'Missing required fields: name, email, phone, and course are required'
+      };
+      res.status(400).json(response);
+      return;
+    }
+    
+    // Validate at least one biometric method is provided
+    if (!faceImage && !fingerprintData) {
+      const response: ApiResponse = {
+        success: false,
+        message: 'At least one biometric method (face or fingerprint) must be provided'
       };
       res.status(400).json(response);
       return;
@@ -30,7 +40,8 @@ export const enrollStudent = async (req: Request, res: Response): Promise<void> 
     // Generate unique student ID
     const studentId = generateStudentId(course);
 
-    if (!isModelsLoaded()) {
+    // Check if face recognition is needed but models aren't loaded
+    if (faceImage && !isModelsLoaded()) {
       const response: ApiResponse = {
         success: false,
         message: 'Face recognition models not loaded. Please try again later.'
@@ -53,30 +64,37 @@ export const enrollStudent = async (req: Request, res: Response): Promise<void> 
       return;
     }
     
-    // Process and validate face image
-    console.log(`📷 Processing face image for ${name} (${studentId})`);
-    console.log(`📷 Image data length: ${faceImage.length} characters`);
-    
-    let faceDescriptor: Float32Array;
-    try {
-      const imageBuffer = Buffer.from(faceImage.split(',')[1], 'base64');
-      console.log(`📷 Buffer size: ${imageBuffer.length} bytes`);
+    // Process face image if provided
+    let faceDescriptor: Float32Array | undefined;
+    if (faceImage) {
+      console.log(`📷 Processing face image for ${name} (${studentId})`);
+      console.log(`📷 Image data length: ${faceImage.length} characters`);
       
-      const processedImage = await preprocessImage(imageBuffer);
-      console.log(`📷 Processed image size: ${processedImage.length} bytes`);
-      
-      faceDescriptor = await extractFaceDescriptor(processedImage);
-      console.log(`📷 Face descriptor extracted: ${faceDescriptor.length} dimensions`);
-    } catch (faceError: any) {
-      console.error('❌ Face processing error:', faceError);
-      const response: ApiResponse = {
-        success: false,
-        message: 'Face processing failed. Please ensure your face is clearly visible and try again.',
-        error: faceError.message || 'Unknown error'
-      };
-      res.status(400).json(response);
-      return;
+      try {
+        const imageBuffer = Buffer.from(faceImage.split(',')[1], 'base64');
+        console.log(`📷 Buffer size: ${imageBuffer.length} bytes`);
+        
+        const processedImage = await preprocessImage(imageBuffer);
+        console.log(`📷 Processed image size: ${processedImage.length} bytes`);
+        
+        faceDescriptor = await extractFaceDescriptor(processedImage);
+        console.log(`📷 Face descriptor extracted: ${faceDescriptor.length} dimensions`);
+      } catch (faceError: any) {
+        console.error('❌ Face processing error:', faceError);
+        const response: ApiResponse = {
+          success: false,
+          message: 'Face processing failed. Please ensure your face is clearly visible and try again.',
+          error: faceError.message || 'Unknown error'
+        };
+        res.status(400).json(response);
+        return;
+      }
     }
+    
+    // Determine biometric methods
+    const biometricMethods: ('face' | 'fingerprint')[] = [];
+    if (faceImage && faceDescriptor) biometricMethods.push('face');
+    if (fingerprintData) biometricMethods.push('fingerprint');
     
     // Create new student first to get MongoDB ID
     const student = new Student({
@@ -85,32 +103,38 @@ export const enrollStudent = async (req: Request, res: Response): Promise<void> 
       email: email.toLowerCase(),
       phone,
       course,
-      faceDescriptor: Array.from(faceDescriptor),
-      faceImage
+      faceDescriptor: faceDescriptor ? Array.from(faceDescriptor) : undefined,
+      faceImage: faceImage || undefined,
+      fingerprintCredentialId: fingerprintData?.credentialId,
+      fingerprintPublicKey: fingerprintData?.publicKey,
+      fingerprintCounter: fingerprintData?.counter || 0,
+      biometricMethods
     });
     
     await student.save();
     
-    // Upload profile image to S3 with organized folder structure
-    console.log(`📤 Uploading profile image to S3 for ${name} (${studentId})`);
-    console.log(`📁 Folder structure: students/${name.toLowerCase().replace(/\s+/g, '-')}/${student._id}/images/`);
-    
-    const profileUploadResult = await s3Service.uploadProfileImage(
-      faceImage, 
-      studentId.toUpperCase(),
-      name,
-      student._id.toString()
-    );
-    
-    if (!profileUploadResult.success) {
-      console.error('❌ Profile image upload failed:', profileUploadResult.error);
-      // Continue with enrollment even if S3 upload fails
-      console.log('⚠️ Continuing with enrollment despite S3 upload failure');
-    } else {
-      console.log(`✅ Profile image uploaded successfully: ${profileUploadResult.url}`);
-      // Update student with S3 URL
-      student.profileImageUrl = profileUploadResult.url;
-      await student.save();
+    // Upload profile image to S3 if face image is provided
+    if (faceImage) {
+      console.log(`📤 Uploading profile image to S3 for ${name} (${studentId})`);
+      console.log(`📁 Folder structure: students/${name.toLowerCase().replace(/\s+/g, '-')}/${student._id}/images/`);
+      
+      const profileUploadResult = await s3Service.uploadProfileImage(
+        faceImage, 
+        studentId.toUpperCase(),
+        name,
+        student._id.toString()
+      );
+      
+      if (!profileUploadResult.success) {
+        console.error('❌ Profile image upload failed:', profileUploadResult.error);
+        // Continue with enrollment even if S3 upload fails
+        console.log('⚠️ Continuing with enrollment despite S3 upload failure');
+      } else {
+        console.log(`✅ Profile image uploaded successfully: ${profileUploadResult.url}`);
+        // Update student with S3 URL
+        student.profileImageUrl = profileUploadResult.url;
+        await student.save();
+      }
     }
     
     // Emit student enrolled event
@@ -131,7 +155,8 @@ export const enrollStudent = async (req: Request, res: Response): Promise<void> 
         email: student.email,
         phone: student.phone,
         course: student.course,
-        profileImageUrl: student.profileImageUrl
+        profileImageUrl: student.profileImageUrl,
+        biometricMethods: student.biometricMethods
       }
     };
     
@@ -161,7 +186,17 @@ export const enrollStudent = async (req: Request, res: Response): Promise<void> 
 
 export const markAttendance = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { faceImage, location = 'Main Campus', notes, action = 'auto' }: MarkAttendanceRequest = req.body;
+    const { faceImage, biometricMethod = 'face', location = 'Main Campus', notes, action = 'auto' }: MarkAttendanceRequest = req.body;
+    
+    // If fingerprint is selected, redirect to fingerprint controller
+    if (biometricMethod === 'fingerprint') {
+      const response: ApiResponse = {
+        success: false,
+        message: 'Please use the fingerprint-specific endpoint for fingerprint attendance'
+      };
+      res.status(400).json(response);
+      return;
+    }
     
     if (!faceImage) {
       const response: ApiResponse = {
@@ -186,23 +221,27 @@ export const markAttendance = async (req: Request, res: Response): Promise<void>
     const processedImage = await preprocessImage(imageBuffer);
     const probeDescriptor = await extractFaceDescriptor(processedImage);
     
-    // Get all active students with their face descriptors
-    const students = await Student.find({ isActive: true }).select('_id studentId name faceDescriptor');
+    // Get all active students with their face descriptors (only those with face enrolled)
+    const students = await Student.find({ 
+      isActive: true, 
+      faceDescriptor: { $exists: true, $ne: [] } 
+    }).select('_id studentId name faceDescriptor');
     
-    console.log(`🔍 Found ${students.length} enrolled students`);
+    console.log(`🔍 Found ${students.length} students enrolled with face recognition`);
     
     if (students.length === 0) {
       const response: ApiResponse = {
         success: false,
-        message: 'No students enrolled in the system'
+        message: 'No students enrolled with face recognition'
       };
       res.status(404).json(response);
       return;
     }
     
-    // Find best match
-    console.log(`🔍 Searching for face match with threshold 0.6...`);
-    const match = await findBestMatch(probeDescriptor, students, 0.6);
+    // Find best match - filter students to ensure they have faceDescriptor
+    const studentsWithFace = students.filter(s => s.faceDescriptor && s.faceDescriptor.length === 128);
+    console.log(`🔍 Searching for face match among ${studentsWithFace.length} students with threshold 0.6...`);
+    const match = await findBestMatch(probeDescriptor, studentsWithFace as any, 0.6);
     
     if (match) {
       console.log(`✅ Found match: ${match.name} (${match.studentIdString}) with confidence ${match.confidence.toFixed(3)}`);
@@ -381,6 +420,7 @@ export const markAttendance = async (req: Request, res: Response): Promise<void>
       timeIn: now,
       status,
       confidence: match.confidence,
+      biometricMethod: 'face',
       location,
       notes,
       loginPhotoUrl: loginUploadResult.success ? loginUploadResult.url : undefined,
@@ -559,20 +599,24 @@ export const checkLoginStatus = async (req: Request, res: Response): Promise<voi
     const processedImage = await preprocessImage(imageBuffer);
     const probeDescriptor = await extractFaceDescriptor(processedImage);
     
-    // Get all active students
-    const students = await Student.find({ isActive: true }).select('_id studentId name faceDescriptor');
+    // Get all active students with face recognition
+    const students = await Student.find({ 
+      isActive: true,
+      faceDescriptor: { $exists: true, $ne: [] }
+    }).select('_id studentId name faceDescriptor');
     
     if (students.length === 0) {
       const response: ApiResponse = {
         success: false,
-        message: 'No students enrolled in the system'
+        message: 'No students enrolled with face recognition'
       };
       res.status(404).json(response);
       return;
     }
     
-    // Find best match
-    const match = await findBestMatch(probeDescriptor, students, 0.6);
+    // Find best match - filter students to ensure they have faceDescriptor
+    const studentsWithFace = students.filter(s => s.faceDescriptor && s.faceDescriptor.length === 128);
+    const match = await findBestMatch(probeDescriptor, studentsWithFace as any, 0.6);
     
     if (!match) {
       const response: ApiResponse<LoginStatusResponse> = {
@@ -698,8 +742,14 @@ export const getAbsentStudents = async (req: Request, res: Response): Promise<vo
     const nextDay = new Date(targetDate);
     nextDay.setDate(nextDay.getDate() + 1);
     
-    // Get all active students
-    const allStudents = await Student.find({ isActive: true }).select('_id studentId name phone course email');
+    // Get all active students who were enrolled on or before the target date
+    // This ensures students enrolled AFTER the target date are not marked as absent
+    const allStudents = await Student.find({ 
+      isActive: true,
+      enrolledAt: { $lte: nextDay } // Only students enrolled before or on the target date
+    }).select('_id studentId name phone course email enrolledAt');
+    
+    console.log(`📊 Found ${allStudents.length} students enrolled on or before ${targetDate.toDateString()}`);
     
     // Get students who marked attendance on target date
     const presentStudents = await Attendance.find({
@@ -708,6 +758,8 @@ export const getAbsentStudents = async (req: Request, res: Response): Promise<vo
         $lt: nextDay
       }
     }).distinct('student');
+    
+    console.log(`✅ ${presentStudents.length} students marked attendance on ${targetDate.toDateString()}`);
     
     // Filter absent students (those not in presentStudents array)
     const absentStudents: AbsentStudent[] = allStudents

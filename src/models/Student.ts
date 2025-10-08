@@ -47,19 +47,39 @@ const studentSchema = new Schema<IStudent>({
   },
   faceDescriptor: {
     type: [Number],
-    required: [true, 'Face descriptor is required'],
+    required: false,
     validate: {
-      validator: (arr: number[]) => arr.length === 128,
+      validator: function(arr: number[]) {
+        return !arr || arr.length === 128;
+      },
       message: 'Face descriptor must contain exactly 128 numbers'
     }
   },
   faceImage: {
     type: String,
-    required: [true, 'Face image is required']
+    required: false
   },
   profileImageUrl: {
     type: String,
     trim: true
+  },
+  fingerprintCredentialId: {
+    type: String,
+    trim: true,
+    sparse: true
+  },
+  fingerprintPublicKey: {
+    type: String,
+    trim: true
+  },
+  fingerprintCounter: {
+    type: Number,
+    default: 0
+  },
+  biometricMethods: {
+    type: [String],
+    enum: ['face', 'fingerprint'],
+    default: []
   },
   isActive: {
     type: Boolean,
@@ -93,6 +113,12 @@ studentSchema.pre('save', function(next) {
   if (this.isModified('studentId')) {
     this.studentId = this.studentId.toUpperCase();
   }
+  
+  // Validate at least one biometric method is provided
+  if (this.isNew && (!this.faceDescriptor || this.faceDescriptor.length === 0) && !this.fingerprintCredentialId) {
+    return next(new Error('At least one biometric method (face or fingerprint) must be provided'));
+  }
+  
   next();
 });
 

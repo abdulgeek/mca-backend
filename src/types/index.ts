@@ -7,9 +7,13 @@ export interface IStudent extends Document {
   email: string;
   phone: string;
   course: string;
-  faceDescriptor: number[];
-  faceImage: string;
+  faceDescriptor?: number[];
+  faceImage?: string;
   profileImageUrl?: string; // S3 URL for profile image
+  fingerprintCredentialId?: string;
+  fingerprintPublicKey?: string;
+  fingerprintCounter?: number;
+  biometricMethods: ('face' | 'fingerprint')[];
   isActive: boolean;
   enrolledAt: Date;
   createdAt: Date;
@@ -24,7 +28,8 @@ export interface IAttendance extends Document {
   timeIn: Date;
   timeOut?: Date;
   status: 'present' | 'absent';
-  confidence: number;
+  confidence?: number;
+  biometricMethod: 'face' | 'fingerprint';
   location: string;
   loginPhotoUrl?: string; // S3 URL for login photo
   logoutPhotoUrl?: string; // S3 URL for logout photo
@@ -93,7 +98,20 @@ export interface EnrollStudentRequest {
   email: string;
   phone: string;
   course: string;
-  faceImage: string;
+  faceImage?: string;
+  fingerprintData?: {
+    credentialId: string;
+    publicKey: string;
+    counter: number;
+  };
+}
+
+export interface FingerprintVerificationRequest {
+  credentialId: string;
+  authenticatorData: string;
+  clientDataJSON: string;
+  signature: string;
+  userHandle?: string;
 }
 
 export interface AbsentStudent {
@@ -106,7 +124,9 @@ export interface AbsentStudent {
 }
 
 export interface MarkAttendanceRequest {
-  faceImage: string;
+  faceImage?: string;
+  fingerprintData?: FingerprintVerificationRequest;
+  biometricMethod: 'face' | 'fingerprint';
   location?: string;
   notes?: string;
   action?: 'auto' | 'login' | 'logout';

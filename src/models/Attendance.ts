@@ -36,9 +36,17 @@ const attendanceSchema = new Schema<IAttendance>({
   },
   confidence: {
     type: Number,
-    required: [true, 'Confidence score is required'],
+    required: false,
     min: [0, 'Confidence must be between 0 and 1'],
     max: [1, 'Confidence must be between 0 and 1']
+  },
+  biometricMethod: {
+    type: String,
+    enum: {
+      values: ['face', 'fingerprint'],
+      message: 'Biometric method must be either face or fingerprint'
+    },
+    required: [true, 'Biometric method is required']
   },
   location: {
     type: String,
