@@ -11,6 +11,7 @@ import dotenv from 'dotenv';
 // Import routes
 import faceRecognitionRoutes from './routes/faceRecognition';
 import fingerprintRoutes from './routes/fingerprint';
+import studentRoutes from './routes/students';
 
 // Import middleware
 import { initializeFaceAPI } from './middleware/faceRecognition';
@@ -129,6 +130,7 @@ const initializeApp = async (): Promise<void> => {
 // Routes
 app.use('/api/face-recognition', faceRecognitionRoutes);
 app.use('/api/fingerprint', fingerprintRoutes);
+app.use('/api/students', studentRoutes);
 
 // Serve Face API models
 app.use('/models', express.static(path.join(__dirname, '../models')));

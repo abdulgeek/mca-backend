@@ -131,3 +131,78 @@ export interface MarkAttendanceRequest {
   notes?: string;
   action?: 'auto' | 'login' | 'logout';
 }
+
+// Student Management Types
+export interface PaginationMetadata {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface StudentListItem {
+  _id: string;
+  studentId: string;
+  name: string;
+  email: string;
+  phone: string;
+  course: string;
+  profileImageUrl?: string;
+  biometricMethods: ('face' | 'fingerprint')[];
+  isActive: boolean;
+  enrolledAt: Date;
+  attendancePercentage: number;
+}
+
+export interface StudentListResponse {
+  students: StudentListItem[];
+  pagination: PaginationMetadata;
+}
+
+export interface AttendanceStats {
+  totalDays: number;
+  presentDays: number;
+  absentDays: number;
+  attendancePercentage: number;
+}
+
+export interface StudentDetailResponse {
+  student: IStudent;
+  attendanceStats: AttendanceStats;
+}
+
+export interface UpdateStudentRequest {
+  name?: string;
+  email?: string;
+  phone?: string;
+  course?: string;
+}
+
+export interface UpdateBiometricsRequest {
+  faceImage?: string;
+  fingerprintData?: {
+    credentialId: string;
+    publicKey: string;
+    counter: number;
+  };
+}
+
+export interface CalendarAttendanceData {
+  date: string; // ISO date string
+  status: 'present' | 'absent' | 'none';
+  timeIn?: Date;
+  timeOut?: Date;
+  duration?: number; // in milliseconds
+  location?: string;
+  biometricMethod?: 'face' | 'fingerprint';
+  confidence?: number;
+  attendanceId?: string;
+}
+
+export interface UpdateAttendanceRequest {
+  status?: 'present' | 'absent';
+  timeIn?: Date;
+  timeOut?: Date;
+  location?: string;
+  notes?: string;
+}
