@@ -12,7 +12,7 @@ pnpm-debug.log
 .env.test
 .env.production
 
-# TypeScript build output
+# TypeScript build output (keep dist out but we'll build it in Docker)
 dist
 build
 
@@ -31,9 +31,14 @@ Thumbs.db
 .git
 .gitignore
 
-# Dockerfile itself (optional)
+# Dockerfile itself
 Dockerfile
 .dockerignore
+README.md
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
 
 # Optional: temporary directories
 tmp
