@@ -1,228 +1,131 @@
+// Existing imports
 import express from 'express';
-import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
-import compression from 'compression';
-import rateLimit from 'express-rate-limit';
-import { createServer } from 'http';
-import { eventService } from './services/eventService';
+import morgan from 'morgan';
 import dotenv from 'dotenv';
-
-// Import routes
-import faceRecognitionRoutes from './routes/faceRecognition';
-import fingerprintRoutes from './routes/fingerprint';
-import studentRoutes from './routes/students';
-
-// Import middleware
-import { initializeFaceAPI } from './middleware/faceRecognition';
-import path from 'path';
 
 // Load environment variables
 dotenv.config();
 
+// Import CostKatana integration
+const {
+  initializeCostKatana,
+  costTrackingMiddleware,
+  trackOperation,
+  getCostSummary,
+  shutdown: shutdownCostKatana
+} = require('./costkatana');
+
+// Initialize Express app
 const app = express();
-const server = createServer(app);
+const PORT = process.env.PORT || 3000;
 
-// Set server timeout to 60 seconds for face processing
-server.timeout = 60000;
+// Initialize CostKatana
+try {
+  initializeCostKatana();
+  console.log('✅ CostKatana initialized successfully');
+} catch (error) {
+  console.error('❌ Failed to initialize CostKatana:', error);
+  // Continue running the app even if CostKatana fails
+}
 
-// Trust proxy for proper IP detection (only trust first proxy)
-app.set('trust proxy', 1);
+// Middleware
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(morgan('combined'));
 
-// Security middleware - Relaxed for development/open access
-app.use(helmet({
-  contentSecurityPolicy: false, // Disable CSP to allow all connections
-  crossOriginEmbedderPolicy: false,
-  crossOriginOpenerPolicy: false,
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
-
-app.use(compression());
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'), // limit each IP to 100 requests per windowMs
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again later.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-app.use('/api/', limiter);
-
-// CORS configuration - Allow all origins
-app.use(cors({
-  origin: '*', // Allow all origins
-  credentials: false, // Must be false when origin is '*'
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
-  allowedHeaders: '*', // Allow all headers
-  exposedHeaders: '*', // Expose all headers
-  maxAge: 86400, // Cache preflight requests for 24 hours
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
-
-// Body parsing middleware
-app.use(express.json({ 
-  limit: process.env.UPLOAD_MAX_SIZE || '50mb',
-  verify: (req, res, buf) => {
-    // Store raw body for signature verification if needed
-    (req as any).rawBody = buf;
-  }
-}));
-app.use(express.urlencoded({ 
-  extended: true, 
-  limit: process.env.UPLOAD_MAX_SIZE || '50mb' 
-}));
-
-// MongoDB connection
-const connectDB = async (): Promise<void> => {
-  try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/attendance-system';
-    
-    await mongoose.connect(mongoURI, {
-      // Remove deprecated options
-    });
-    
-    console.log('✅ MongoDB connected successfully');
-    
-    // Handle connection events
-    mongoose.connection.on('error', (err) => {
-      console.error('❌ MongoDB connection error:', err);
-    });
-    
-    mongoose.connection.on('disconnected', () => {
-      console.log('⚠️ MongoDB disconnected');
-    });
-    
-    // Graceful shutdown
-    process.on('SIGINT', async () => {
-      await mongoose.connection.close();
-      console.log('📴 MongoDB connection closed through app termination');
-      process.exit(0);
-    });
-    
-  } catch (error) {
-    console.error('❌ MongoDB connection failed:', error);
-    process.exit(1);
-  }
-};
-
-// Initialize Face API and Event Service
-const initializeApp = async (): Promise<void> => {
-  try {
-    await initializeFaceAPI();
-    console.log('✅ Face API initialized successfully');
-    
-    // Setup event service logging
-    eventService.setupLogging();
-    console.log('✅ Event service initialized successfully');
-  } catch (error) {
-    console.error('❌ Face API initialization failed:', error);
-    // Don't exit the process, just log the error
-    console.log('⚠️ Continuing without face recognition (models will be loaded on first request)');
-  }
-};
-
-// Routes
-app.use('/api/face-recognition', faceRecognitionRoutes);
-app.use('/api/fingerprint', fingerprintRoutes);
-app.use('/api/students', studentRoutes);
-
-// Serve Face API models
-app.use('/models', express.static(path.join(__dirname, '../models')));
+// Apply CostKatana tracking middleware
+app.use(costTrackingMiddleware);
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Server is running',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development'
-  });
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-// Event service for real-time updates
-eventService.on('attendance:marked', (data) => {
-  console.log('📊 Real-time attendance update:', data);
-  // Here you can add additional real-time features like SSE or polling endpoints
+// CostKatana endpoints
+app.get('/api/costs/summary', async (req, res) => {
+  try {
+    const { startDate, endDate, groupBy } = req.query;
+    const summary = await getCostSummary({
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      groupBy: groupBy as string
+    });
+    res.json({ success: true, data: summary });
+  } catch (error) {
+    console.error('Failed to get cost summary:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve cost summary' });
+  }
 });
 
-eventService.on('student:enrolled', (data) => {
-  console.log('👤 Real-time student enrollment:', data);
+// Example AI endpoint with cost tracking
+app.post('/api/ai/generate', async (req, res) => {
+  try {
+    const { prompt, model } = req.body;
+    
+    // Track the operation start
+    const operationId = `op_${Date.now()}`;
+    
+    // Your AI generation logic here
+    // const result = await yourAIService.generate(prompt, model);
+    
+    // Track the cost of this operation
+    await trackOperation('ai_generation', {
+      operationId,
+      model: model || 'default',
+      prompt: prompt?.substring(0, 100), // Log first 100 chars
+      userId: (req as any).user?.id || 'anonymous'
+    });
+    
+    // Mock response for example
+    const result = {
+      text: 'Generated response',
+      model: model || 'amazon.nova-lite-v1:0',
+      tokens: 150
+    };
+    
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('AI generation failed:', error);
+    res.status(500).json({ success: false, error: 'Generation failed' });
+  }
 });
 
-eventService.on('system:status', (data) => {
-  console.log('🔧 Real-time system status:', data);
-});
-
-// Global error handler
+// Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('❌ Error:', err.stack);
-  
-  const response = {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
     success: false,
-    message: 'Something went wrong!',
-    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error',
-    timestamp: new Date().toISOString()
-  };
-  
-  res.status(err.status || 500).json(response);
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found',
-    path: req.originalUrl,
-    method: req.method,
-    timestamp: new Date().toISOString()
+    error: err.message || 'Internal server error'
   });
 });
 
 // Start server
-const PORT = process.env.PORT || 5001;
-
-const startServer = async (): Promise<void> => {
-  try {
-    // Connect to database
-    await connectDB();
-    
-    // Initialize face recognition
-    await initializeApp();
-    
-    // Start HTTP server
-    server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
-      console.log(`📱 Health check: http://localhost:${PORT}/api/health`);
-    });
-    
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  }
-};
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err);
-  process.exit(1);
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 CostKatana cost tracking enabled`);
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Rejection:', err);
-  process.exit(1);
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  server.close(async () => {
+    await shutdownCostKatana();
+    console.log('Server closed');
+    process.exit(0);
+  });
 });
 
-// Start the server
-startServer();
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  server.close(async () => {
+    await shutdownCostKatana();
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
 
-export { app, eventService };
+export default app;
