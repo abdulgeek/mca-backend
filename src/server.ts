@@ -1,228 +1,105 @@
+// Updated server.ts with CostKatana integration
 import express from 'express';
-import mongoose from 'mongoose';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import rateLimit from 'express-rate-limit';
-import { createServer } from 'http';
-import { eventService } from './services/eventService';
-import dotenv from 'dotenv';
+import { initializeCostKatana, costTrackingMiddleware, trackCost, optimizeRequest, getCostReport } from './costkatana';
 
-// Import routes
-import faceRecognitionRoutes from './routes/faceRecognition';
-import fingerprintRoutes from './routes/fingerprint';
-import studentRoutes from './routes/students';
-
-// Import middleware
-import { initializeFaceAPI } from './middleware/faceRecognition';
-import path from 'path';
-
-// Load environment variables
-dotenv.config();
+// ... existing imports ...
 
 const app = express();
-const server = createServer(app);
+const PORT = process.env.PORT || 3000;
 
-// Set server timeout to 60 seconds for face processing
-server.timeout = 60000;
+// Initialize CostKatana early in the application lifecycle
+const costKatana = initializeCostKatana();
 
-// Trust proxy for proper IP detection (only trust first proxy)
-app.set('trust proxy', 1);
+// ... existing middleware ...
 
-// Security middleware - Relaxed for development/open access
-app.use(helmet({
-  contentSecurityPolicy: false, // Disable CSP to allow all connections
-  crossOriginEmbedderPolicy: false,
-  crossOriginOpenerPolicy: false,
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
+// Add CostKatana tracking middleware (add after body parser but before routes)
+app.use(costTrackingMiddleware());
 
-app.use(compression());
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'), // limit each IP to 100 requests per windowMs
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again later.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-app.use('/api/', limiter);
-
-// CORS configuration - Allow all origins
-app.use(cors({
-  origin: '*', // Allow all origins
-  credentials: false, // Must be false when origin is '*'
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
-  allowedHeaders: '*', // Allow all headers
-  exposedHeaders: '*', // Expose all headers
-  maxAge: 86400, // Cache preflight requests for 24 hours
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
-
-// Body parsing middleware
-app.use(express.json({ 
-  limit: process.env.UPLOAD_MAX_SIZE || '50mb',
-  verify: (req, res, buf) => {
-    // Store raw body for signature verification if needed
-    (req as any).rawBody = buf;
+// CostKatana health check endpoint
+app.get('/health/costkatana', async (req, res) => {
+  const instance = costKatana;
+  if (!instance) {
+    return res.status(503).json({ 
+      status: 'unavailable', 
+      message: 'CostKatana not initialized' 
+    });
   }
-}));
-app.use(express.urlencoded({ 
-  extended: true, 
-  limit: process.env.UPLOAD_MAX_SIZE || '50mb' 
-}));
-
-// MongoDB connection
-const connectDB = async (): Promise<void> => {
-  try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/attendance-system';
-    
-    await mongoose.connect(mongoURI, {
-      // Remove deprecated options
-    });
-    
-    console.log('✅ MongoDB connected successfully');
-    
-    // Handle connection events
-    mongoose.connection.on('error', (err) => {
-      console.error('❌ MongoDB connection error:', err);
-    });
-    
-    mongoose.connection.on('disconnected', () => {
-      console.log('⚠️ MongoDB disconnected');
-    });
-    
-    // Graceful shutdown
-    process.on('SIGINT', async () => {
-      await mongoose.connection.close();
-      console.log('📴 MongoDB connection closed through app termination');
-      process.exit(0);
-    });
-    
-  } catch (error) {
-    console.error('❌ MongoDB connection failed:', error);
-    process.exit(1);
-  }
-};
-
-// Initialize Face API and Event Service
-const initializeApp = async (): Promise<void> => {
-  try {
-    await initializeFaceAPI();
-    console.log('✅ Face API initialized successfully');
-    
-    // Setup event service logging
-    eventService.setupLogging();
-    console.log('✅ Event service initialized successfully');
-  } catch (error) {
-    console.error('❌ Face API initialization failed:', error);
-    // Don't exit the process, just log the error
-    console.log('⚠️ Continuing without face recognition (models will be loaded on first request)');
-  }
-};
-
-// Routes
-app.use('/api/face-recognition', faceRecognitionRoutes);
-app.use('/api/fingerprint', fingerprintRoutes);
-app.use('/api/students', studentRoutes);
-
-// Serve Face API models
-app.use('/models', express.static(path.join(__dirname, '../models')));
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Server is running',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
+  
+  res.json({ 
+    status: 'healthy',
+    tracking: process.env.COSTKATANA_ENABLE_TRACKING !== 'false',
+    optimization: process.env.COSTKATANA_ENABLE_OPTIMIZATION !== 'false',
     environment: process.env.NODE_ENV || 'development'
   });
 });
 
-// Event service for real-time updates
-eventService.on('attendance:marked', (data) => {
-  console.log('📊 Real-time attendance update:', data);
-  // Here you can add additional real-time features like SSE or polling endpoints
-});
-
-eventService.on('student:enrolled', (data) => {
-  console.log('👤 Real-time student enrollment:', data);
-});
-
-eventService.on('system:status', (data) => {
-  console.log('🔧 Real-time system status:', data);
-});
-
-// Global error handler
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('❌ Error:', err.stack);
-  
-  const response = {
-    success: false,
-    message: 'Something went wrong!',
-    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error',
-    timestamp: new Date().toISOString()
-  };
-  
-  res.status(err.status || 500).json(response);
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found',
-    path: req.originalUrl,
-    method: req.method,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Start server
-const PORT = process.env.PORT || 5001;
-
-const startServer = async (): Promise<void> => {
+// CostKatana cost report endpoint
+app.get('/api/costs/report', async (req, res) => {
   try {
-    // Connect to database
-    await connectDB();
-    
-    // Initialize face recognition
-    await initializeApp();
-    
-    // Start HTTP server
-    server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
-      console.log(`📱 Health check: http://localhost:${PORT}/api/health`);
-    });
-    
+    const { startDate, endDate } = req.query;
+    const report = await getCostReport(
+      startDate ? new Date(startDate as string) : undefined,
+      endDate ? new Date(endDate as string) : undefined
+    );
+    res.json(report);
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
+    res.status(500).json({ error: 'Failed to generate cost report' });
   }
-};
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err);
-  process.exit(1);
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Rejection:', err);
-  process.exit(1);
+// Example: Integrate CostKatana with an AI endpoint
+app.post('/api/ai/completion', async (req, res) => {
+  try {
+    // Optimize request parameters using Cortex
+    const optimizedParams = await optimizeRequest({
+      model: req.body.model || process.env.COSTKATANA_DEFAULT_MODEL,
+      prompt: req.body.prompt,
+      max_tokens: req.body.max_tokens || 1000,
+      temperature: req.body.temperature || 0.7
+    });
+
+    // Your existing AI logic here
+    // const result = await yourAIService.complete(optimizedParams);
+    
+    // Track the cost of this operation
+    await trackCost('ai-completion', {
+      model: optimizedParams.model,
+      tokens: optimizedParams.max_tokens,
+      userId: req.user?.id,
+      endpoint: req.path
+    });
+
+    // For demo purposes, returning optimized params
+    res.json({ 
+      success: true, 
+      optimizedParams,
+      message: 'AI completion with cost tracking' 
+    });
+  } catch (error) {
+    console.error('AI completion error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-// Start the server
-startServer();
+// ... existing routes ...
 
-export { app, eventService };
+// Graceful shutdown with CostKatana cleanup
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  
+  // Flush any pending CostKatana metrics
+  if (costKatana && typeof costKatana.flush === 'function') {
+    await costKatana.flush().catch(console.error);
+  }
+  
+  // ... existing shutdown logic ...
+  
+  process.exit(0);
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`CostKatana: ${costKatana ? 'Initialized ✓' : 'Not initialized ✗'}`);
+});
+
+export default app;
