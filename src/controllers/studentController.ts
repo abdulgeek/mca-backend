@@ -446,10 +446,18 @@ export const getStudentAttendanceCalendar = async (req: Request, res: Response):
       }
     }).sort({ date: 1 });
 
+    // Helper function to format date as YYYY-MM-DD consistently
+    const formatDateStr = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
     // Create a map of attendance by date
     const attendanceMap = new Map<string, any>();
     attendanceRecords.forEach(record => {
-      const dateStr = record.date.toISOString().split('T')[0];
+      const dateStr = formatDateStr(record.date);
       attendanceMap.set(dateStr, record);
     });
 
@@ -458,16 +466,21 @@ export const getStudentAttendanceCalendar = async (req: Request, res: Response):
     const currentDate = new Date(start);
 
     while (currentDate <= end) {
-      const dateStr = currentDate.toISOString().split('T')[0];
+      const dateStr = formatDateStr(currentDate);
       const attendance = attendanceMap.get(dateStr);
 
       if (attendance) {
+        // Use the status from database as primary source
+        // If status is explicitly 'absent', show as absent (even if timeIn exists)
+        // If status is 'present' but no timeIn, it's still present (timeIn might be set later)
+        const actualStatus = attendance.status || (attendance.timeIn ? 'present' : 'absent');
+        
         calendarData.push({
           date: dateStr,
-          status: attendance.status,
+          status: actualStatus,
           timeIn: attendance.timeIn,
           timeOut: attendance.timeOut,
-          duration: attendance.timeOut 
+          duration: attendance.timeOut && attendance.timeIn
             ? attendance.timeOut.getTime() - attendance.timeIn.getTime() 
             : undefined,
           location: attendance.location,

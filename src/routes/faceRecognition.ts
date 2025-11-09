@@ -67,8 +67,8 @@ const studentAttendanceValidation = [
   param('studentId')
     .notEmpty()
     .withMessage('Student ID is required')
-    .matches(/^[A-Z0-9]+$/)
-    .withMessage('Student ID must contain only uppercase letters and numbers'),
+    .matches(/^[A-Z0-9-]+$/)
+    .withMessage('Student ID must contain only uppercase letters, numbers, and hyphens'),
   query('startDate')
     .optional()
     .isISO8601()

@@ -23,7 +23,10 @@ const COURSE_CODE_MAP: Record<string, string> = {
   'Degree - B.Com': 'DEGCOM',
   'Degree - B.Sc': 'DEGBSC',
   'Degree - BA': 'DEGBA',
-  'Degree - Other': 'DEGOTH'
+  'Degree - Other': 'DEGOTH',
+  'DCA': 'DCA',
+  'Programming': 'PROG',
+  'DCAD': 'DCAD'
 };
 
 /**

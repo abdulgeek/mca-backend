@@ -20,7 +20,10 @@ const attendanceSchema = new Schema<IAttendance>({
   },
   timeIn: {
     type: Date,
-    required: [true, 'Time in is required'],
+    required: function(this: any) {
+      // timeIn is required only if status is 'present'
+      return this.status === 'present';
+    },
     default: Date.now
   },
   timeOut: {

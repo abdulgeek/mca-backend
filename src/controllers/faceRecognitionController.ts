@@ -492,13 +492,12 @@ export const getAttendanceStats = async (req: Request, res: Response): Promise<v
     
     const attendanceRate = totalStudents > 0 ? (presentToday / totalStudents) * 100 : 0;
     
-    // Get recent attendance (last 10)
+    // Get recent attendance (all records for today)
     const recentAttendance = await Attendance.find({
       date: { $gte: today }
     })
     .populate('student', 'name studentId')
-    .sort({ timeIn: -1 })
-    .limit(10);
+    .sort({ timeIn: -1 });
     
     // Get weekly trend data (last 7 days)
     const weeklyTrend = await getWeeklyTrendData(totalStudents);
@@ -511,6 +510,7 @@ export const getAttendanceStats = async (req: Request, res: Response): Promise<v
         presentToday,
         attendanceRate: Math.round(attendanceRate * 100) / 100,
         recentAttendance: recentAttendance.map(att => ({
+          _id: att._id.toString(),
           studentId: att.studentId,
           studentName: (att.student as any)?.name || 'Unknown',
           timeIn: att.timeIn,
@@ -559,13 +559,19 @@ const getWeeklyTrendData = async (totalStudents: number) => {
       status: { $in: ['present', 'late'] }
     });
     
-    const absentCount = Math.max(0, totalStudents - presentCount);
+    // Check if this day is Sunday (day 0 = Sunday) - it's a holiday
+    const dayOfWeek = date.getDay();
+    const isSunday = dayOfWeek === 0;
+    
+    // On Sundays, no students are marked as absent (holiday)
+    const absentCount = isSunday ? 0 : Math.max(0, totalStudents - presentCount);
     
     weeklyTrend.push({
       name: dayNames[date.getDay()],
       present: presentCount,
       absent: absentCount,
-      date: date.toISOString().split('T')[0]
+      date: date.toISOString().split('T')[0],
+      isHoliday: isSunday
     });
   }
   
@@ -738,6 +744,26 @@ export const getAbsentStudents = async (req: Request, res: Response): Promise<vo
       targetDate.setDate(targetDate.getDate() - 1); // Yesterday
     }
     targetDate.setHours(0, 0, 0, 0);
+    
+    // Check if target date is Sunday (day 0 = Sunday)
+    const dayOfWeek = targetDate.getDay();
+    if (dayOfWeek === 0) {
+      // Sunday is a holiday - no absent students
+      const response: ApiResponse = {
+        success: true,
+        message: 'Sunday is a holiday - no absent students',
+        data: {
+          date: targetDate.toISOString().split('T')[0],
+          totalStudents: 0,
+          presentCount: 0,
+          absentCount: 0,
+          absentStudents: [],
+          isHoliday: true
+        }
+      };
+      res.json(response);
+      return;
+    }
     
     const nextDay = new Date(targetDate);
     nextDay.setDate(nextDay.getDate() + 1);

@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 import { IStudent } from '../types';
 
 const studentSchema = new Schema<IStudent>({
@@ -40,7 +40,8 @@ const studentSchema = new Schema<IStudent>({
         '6th Standard', '7th Standard', '8th Standard', '9th Standard', '10th Standard',
         '1st PUC - Science', '1st PUC - Commerce',
         '2nd PUC - Science', '2nd PUC - Commerce',
-        'Degree - MCA', 'Degree - BCA', 'Degree - B.Com', 'Degree - B.Sc', 'Degree - BA', 'Degree - Other'
+        'Degree - MCA', 'Degree - BCA', 'Degree - B.Com', 'Degree - B.Sc', 'Degree - BA', 'Degree - Other',
+        'DCA', 'Programming', 'DCAD'
       ],
       message: 'Invalid course selection'
     }

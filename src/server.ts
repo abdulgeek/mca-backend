@@ -6,6 +6,7 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { eventService } from './services/eventService';
+import { initializeAutoLogoutCron, triggerAutoLogout } from './services/autoLogoutService';
 import dotenv from 'dotenv';
 
 // Import routes
@@ -120,6 +121,9 @@ const initializeApp = async (): Promise<void> => {
     // Setup event service logging
     eventService.setupLogging();
     console.log('✅ Event service initialized successfully');
+    
+    // Initialize auto-logout cron job
+    initializeAutoLogoutCron();
   } catch (error) {
     console.error('❌ Face API initialization failed:', error);
     // Don't exit the process, just log the error
