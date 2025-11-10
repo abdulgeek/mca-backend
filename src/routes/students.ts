@@ -7,7 +7,8 @@ import {
   toggleStudentStatus,
   getStudentAttendanceCalendar,
   updateAttendanceRecord,
-  deleteAttendanceRecord
+  deleteAttendanceRecord,
+  getStudentImageBase64
 } from '../controllers/studentController';
 import { body, param, query } from 'express-validator';
 import { validateRequest } from '../middleware/validation';
@@ -108,6 +109,7 @@ const attendanceIdValidation = [
 
 // Student Routes
 router.get('/', getAllStudents);
+router.get('/image/base64', getStudentImageBase64); // Must be before /:id route
 router.get('/:id', studentIdValidation, validateRequest, getStudentById);
 router.put('/:id', updateStudentValidation, validateRequest, updateStudent);
 router.put('/:id/biometrics', updateBiometricsValidation, validateRequest, updateStudentBiometrics);

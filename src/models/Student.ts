@@ -46,6 +46,24 @@ const studentSchema = new Schema<IStudent>({
       message: 'Invalid course selection'
     }
   },
+  fatherName: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Father name cannot exceed 100 characters']
+  },
+  motherName: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Mother name cannot exceed 100 characters']
+  },
+  bloodGroup: {
+    type: String,
+    trim: true,
+    enum: {
+      values: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+      message: 'Invalid blood group. Must be one of: A+, A-, B+, B-, AB+, AB-, O+, O-'
+    }
+  },
   faceDescriptor: {
     type: [Number],
     required: false,

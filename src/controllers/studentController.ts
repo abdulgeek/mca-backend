@@ -13,6 +13,7 @@ import {
 } from '../types';
 import { extractFaceDescriptor, preprocessImage, isModelsLoaded } from '../middleware/faceRecognition';
 import { s3Service } from '../services/s3Service';
+import axios from 'axios';
 
 export const getAllStudents = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -88,6 +89,9 @@ export const getAllStudents = async (req: Request, res: Response): Promise<void>
           email: student.email,
           phone: student.phone,
           course: student.course,
+          fatherName: student.fatherName,
+          motherName: student.motherName,
+          bloodGroup: student.bloodGroup,
           profileImageUrl: student.profileImageUrl,
           biometricMethods: student.biometricMethods,
           isActive: student.isActive,
@@ -173,7 +177,7 @@ export const updateStudent = async (req: Request, res: Response): Promise<void> 
     const updateData: UpdateStudentRequest = req.body;
 
     // Validate at least one field to update
-    if (!updateData.name && !updateData.email && !updateData.phone && !updateData.course) {
+    if (!updateData.name && !updateData.email && !updateData.phone && !updateData.course && !updateData.fatherName && !updateData.motherName && updateData.bloodGroup === undefined) {
       const response: ApiResponse = {
         success: false,
         message: 'At least one field must be provided for update'
@@ -224,6 +228,9 @@ export const updateStudent = async (req: Request, res: Response): Promise<void> 
     if (updateData.email) student.email = updateData.email.toLowerCase();
     if (updateData.phone) student.phone = updateData.phone;
     if (updateData.course) student.course = updateData.course;
+    if (updateData.fatherName !== undefined) student.fatherName = updateData.fatherName;
+    if (updateData.motherName !== undefined) student.motherName = updateData.motherName;
+    if (updateData.bloodGroup !== undefined) student.bloodGroup = updateData.bloodGroup;
 
     await student.save();
 
@@ -237,6 +244,9 @@ export const updateStudent = async (req: Request, res: Response): Promise<void> 
         email: student.email,
         phone: student.phone,
         course: student.course,
+        fatherName: student.fatherName,
+        motherName: student.motherName,
+        bloodGroup: student.bloodGroup,
         profileImageUrl: student.profileImageUrl,
         biometricMethods: student.biometricMethods,
         isActive: student.isActive
@@ -639,5 +649,45 @@ const calculateAttendanceStats = async (studentId: string): Promise<AttendanceSt
     absentDays: Math.max(0, absentDays),
     attendancePercentage: Math.round(attendancePercentage * 100) / 100
   };
+};
+
+// Proxy endpoint to fetch S3 images and convert to base64 (CORS workaround)
+export const getStudentImageBase64 = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { imageUrl } = req.query;
+
+    if (!imageUrl || typeof imageUrl !== 'string') {
+      res.status(400).json({
+        success: false,
+        message: 'Image URL is required'
+      });
+      return;
+    }
+
+    // Fetch the image from S3
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      headers: {
+        'Accept': 'image/*'
+      }
+    });
+
+    // Convert to base64
+    const base64Image = Buffer.from(response.data, 'binary').toString('base64');
+    const mimeType = response.headers['content-type'] || 'image/jpeg';
+    const base64DataUri = `data:${mimeType};base64,${base64Image}`;
+
+    res.status(200).json({
+      success: true,
+      data: base64DataUri
+    });
+  } catch (error: any) {
+    console.error('❌ Error fetching image:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch image',
+      error: error.message
+    });
+  }
 };
 

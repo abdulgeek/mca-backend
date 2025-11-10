@@ -7,6 +7,9 @@ export interface IStudent extends Document {
   email: string;
   phone: string;
   course: string;
+  fatherName?: string;
+  motherName?: string;
+  bloodGroup?: string;
   faceDescriptor?: number[];
   faceImage?: string;
   profileImageUrl?: string; // S3 URL for profile image
@@ -98,6 +101,9 @@ export interface EnrollStudentRequest {
   email: string;
   phone: string;
   course: string;
+  fatherName?: string;
+  motherName?: string;
+  bloodGroup?: string;
   faceImage?: string;
   fingerprintData?: {
     credentialId: string;
@@ -147,6 +153,9 @@ export interface StudentListItem {
   email: string;
   phone: string;
   course: string;
+  fatherName?: string;
+  motherName?: string;
+  bloodGroup?: string;
   profileImageUrl?: string;
   biometricMethods: ('face' | 'fingerprint')[];
   isActive: boolean;
@@ -176,6 +185,9 @@ export interface UpdateStudentRequest {
   email?: string;
   phone?: string;
   course?: string;
+  fatherName?: string;
+  motherName?: string;
+  bloodGroup?: string;
 }
 
 export interface UpdateBiometricsRequest {

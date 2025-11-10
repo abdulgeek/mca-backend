@@ -15,7 +15,7 @@ import { generateWhatsAppLink, generateAbsenceMessage } from '../utils/whatsapp'
 
 export const enrollStudent = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, phone, course, faceImage, fingerprintData }: EnrollStudentRequest = req.body;
+    const { name, email, phone, course, fatherName, bloodGroup, faceImage, fingerprintData }: EnrollStudentRequest = req.body;
     
     // Validate required fields
     if (!name || !email || !phone || !course) {
@@ -103,6 +103,8 @@ export const enrollStudent = async (req: Request, res: Response): Promise<void> 
       email: email.toLowerCase(),
       phone,
       course,
+      fatherName,
+      bloodGroup,
       faceDescriptor: faceDescriptor ? Array.from(faceDescriptor) : undefined,
       faceImage: faceImage || undefined,
       fingerprintCredentialId: fingerprintData?.credentialId,

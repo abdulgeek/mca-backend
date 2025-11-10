@@ -13,6 +13,7 @@ import dotenv from 'dotenv';
 import faceRecognitionRoutes from './routes/faceRecognition';
 import fingerprintRoutes from './routes/fingerprint';
 import studentRoutes from './routes/students';
+import authRoutes from './routes/auth';
 
 // Import middleware
 import { initializeFaceAPI } from './middleware/faceRecognition';
@@ -132,6 +133,7 @@ const initializeApp = async (): Promise<void> => {
 };
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/face-recognition', faceRecognitionRoutes);
 app.use('/api/fingerprint', fingerprintRoutes);
 app.use('/api/students', studentRoutes);
