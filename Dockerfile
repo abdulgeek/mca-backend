@@ -1,5 +1,5 @@
 # Build Stage
-FROM node:18 AS builder
+FROM --platform=linux/amd64 node:18 AS builder
 WORKDIR /app
 
 # Install build dependencies for native modules (canvas, sharp)
@@ -25,7 +25,7 @@ COPY models ./models
 RUN npm run build
 
 # Production Stage
-FROM node:18-slim
+FROM --platform=linux/amd64 node:18-slim
 WORKDIR /app
 
 # Install runtime dependencies for native modules
