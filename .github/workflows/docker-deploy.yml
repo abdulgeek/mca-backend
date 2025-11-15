@@ -37,8 +37,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./mca-backend
-          file: ./mca-backend/Dockerfile
+          context: .
+          file: ./Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -47,6 +47,6 @@ jobs:
           cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
       
       - name: Trigger Render Deploy
+        if: secrets.RENDER_DEPLOY_HOOK != ''
         run: |
           curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
-
