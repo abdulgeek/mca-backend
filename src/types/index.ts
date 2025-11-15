@@ -12,7 +12,7 @@ export interface IStudent extends Document {
   bloodGroup?: string;
   faceDescriptor?: number[];
   faceImage?: string;
-  profileImageUrl?: string; // S3 URL for profile image
+  profileImageUrl?: string; // Cloudinary URL for profile image
   fingerprintCredentialId?: string;
   fingerprintPublicKey?: string;
   fingerprintCounter?: number;
@@ -34,8 +34,8 @@ export interface IAttendance extends Document {
   confidence?: number;
   biometricMethod: 'face' | 'fingerprint';
   location: string;
-  loginPhotoUrl?: string; // S3 URL for login photo
-  logoutPhotoUrl?: string; // S3 URL for logout photo
+  loginPhotoUrl?: string; // Cloudinary URL for login photo
+  logoutPhotoUrl?: string; // Cloudinary URL for logout photo
   whatsappNotificationSent: boolean;
   deviceInfo: {
     userAgent?: string;

@@ -8,7 +8,7 @@ import {
   isModelsLoaded
 } from '../middleware/faceRecognition';
 import { eventService } from '../services/eventService';
-import { s3Service } from '../services/s3Service';
+import { cloudinaryService } from '../services/cloudinaryService';
 import { ApiResponse, EnrollStudentRequest, MarkAttendanceRequest, LoginStatusResponse, AbsentStudent } from '../types';
 import { generateStudentId } from '../utils/idGenerator';
 import { generateWhatsAppLink, generateAbsenceMessage } from '../utils/whatsapp';
@@ -115,12 +115,12 @@ export const enrollStudent = async (req: Request, res: Response): Promise<void> 
     
     await student.save();
     
-    // Upload profile image to S3 if face image is provided
+    // Upload profile image to Cloudinary if face image is provided
     if (faceImage) {
-      console.log(`📤 Uploading profile image to S3 for ${name} (${studentId})`);
+      console.log(`📤 Uploading profile image to Cloudinary for ${name} (${studentId})`);
       console.log(`📁 Folder structure: students/${name.toLowerCase().replace(/\s+/g, '-')}/${student._id}/images/`);
       
-      const profileUploadResult = await s3Service.uploadProfileImage(
+      const profileUploadResult = await cloudinaryService.uploadProfileImage(
         faceImage, 
         studentId.toUpperCase(),
         name,
@@ -129,11 +129,11 @@ export const enrollStudent = async (req: Request, res: Response): Promise<void> 
       
       if (!profileUploadResult.success) {
         console.error('❌ Profile image upload failed:', profileUploadResult.error);
-        // Continue with enrollment even if S3 upload fails
-        console.log('⚠️ Continuing with enrollment despite S3 upload failure');
+        // Continue with enrollment even if Cloudinary upload fails
+        console.log('⚠️ Continuing with enrollment despite Cloudinary upload failure');
       } else {
         console.log(`✅ Profile image uploaded successfully: ${profileUploadResult.url}`);
-        // Update student with S3 URL
+        // Update student with Cloudinary URL
         student.profileImageUrl = profileUploadResult.url;
         await student.save();
       }
@@ -329,9 +329,9 @@ export const markAttendance = async (req: Request, res: Response): Promise<void>
       const now = new Date();
       existingAttendance.timeOut = now;
       
-      // Upload logout image to S3
-      console.log(`📤 Uploading logout image to S3 for ${match.name} (${match.studentIdString})`);
-      const logoutUploadResult = await s3Service.uploadAttendanceImage(
+      // Upload logout image to Cloudinary
+      console.log(`📤 Uploading logout image to Cloudinary for ${match.name} (${match.studentIdString})`);
+      const logoutUploadResult = await cloudinaryService.uploadAttendanceImage(
         faceImage,
         match.studentIdString,
         match.name,
@@ -394,11 +394,11 @@ export const markAttendance = async (req: Request, res: Response): Promise<void>
     // Clean up IP address (remove IPv6 prefix if present)
     const cleanIP = clientIP.replace(/^::ffff:/, '');
     
-    // Upload login image to S3 with organized folder structure
-    console.log(`📤 Uploading login image to S3 for ${match.name} (${match.studentIdString})`);
+    // Upload login image to Cloudinary with organized folder structure
+    console.log(`📤 Uploading login image to Cloudinary for ${match.name} (${match.studentIdString})`);
     console.log(`📁 Folder structure: students/${match.name.toLowerCase().replace(/\s+/g, '-')}/${match.studentId}/images/`);
     
-    const loginUploadResult = await s3Service.uploadAttendanceImage(
+    const loginUploadResult = await cloudinaryService.uploadAttendanceImage(
       faceImage, 
       match.studentIdString,
       match.name,

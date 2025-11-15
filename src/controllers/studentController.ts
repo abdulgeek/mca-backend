@@ -12,7 +12,7 @@ import {
   AttendanceStats
 } from '../types';
 import { extractFaceDescriptor, preprocessImage, isModelsLoaded } from '../middleware/faceRecognition';
-import { s3Service } from '../services/s3Service';
+import { cloudinaryService } from '../services/cloudinaryService';
 import axios from 'axios';
 
 export const getAllStudents = async (req: Request, res: Response): Promise<void> => {
@@ -312,8 +312,8 @@ export const updateStudentBiometrics = async (req: Request, res: Response): Prom
         student.faceDescriptor = Array.from(faceDescriptor);
         student.faceImage = faceImage;
 
-        // Upload to S3
-        const profileUploadResult = await s3Service.uploadProfileImage(
+        // Upload to Cloudinary
+        const profileUploadResult = await cloudinaryService.uploadProfileImage(
           faceImage, 
           student.studentId,
           student.name,
@@ -651,7 +651,7 @@ const calculateAttendanceStats = async (studentId: string): Promise<AttendanceSt
   };
 };
 
-// Proxy endpoint to fetch S3 images and convert to base64 (CORS workaround)
+// Proxy endpoint to fetch Cloudinary images and convert to base64 (CORS workaround)
 export const getStudentImageBase64 = async (req: Request, res: Response): Promise<void> => {
   try {
     const { imageUrl } = req.query;
@@ -664,7 +664,7 @@ export const getStudentImageBase64 = async (req: Request, res: Response): Promis
       return;
     }
 
-    // Fetch the image from S3
+    // Fetch the image from Cloudinary
     const response = await axios.get(imageUrl, {
       responseType: 'arraybuffer',
       headers: {

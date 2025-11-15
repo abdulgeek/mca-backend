@@ -50,7 +50,7 @@ COPY --from=builder /app/models ./models
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PORT=5001
+ENV PORT=${PORT:-5001}
 EXPOSE 5001
 
 # Create non-root user and switch to it
