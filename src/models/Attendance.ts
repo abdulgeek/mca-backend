@@ -23,8 +23,9 @@ const attendanceSchema = new Schema<IAttendance>({
     required: function(this: any) {
       // timeIn is required only if status is 'present'
       return this.status === 'present';
-    },
-    default: Date.now
+    }
+    // No default - timeIn should only be set explicitly for present records
+    // Absent records should not have timeIn
   },
   timeOut: {
     type: Date

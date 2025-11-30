@@ -59,8 +59,16 @@ const studentSchema = new Schema<IStudent>({
   bloodGroup: {
     type: String,
     trim: true,
-    enum: {
-      values: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+    required: false,
+    validate: {
+      validator: function(value: string | null | undefined) {
+        // Allow empty string, null, or undefined (optional field)
+        if (!value || value === '' || value === null || value === undefined) {
+          return true;
+        }
+        // If value is provided, it must be one of the valid blood groups
+        return ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].includes(value);
+      },
       message: 'Invalid blood group. Must be one of: A+, A-, B+, B-, AB+, AB-, O+, O-'
     }
   },

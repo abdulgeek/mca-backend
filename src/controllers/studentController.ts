@@ -230,7 +230,10 @@ export const updateStudent = async (req: Request, res: Response): Promise<void> 
     if (updateData.course) student.course = updateData.course;
     if (updateData.fatherName !== undefined) student.fatherName = updateData.fatherName;
     if (updateData.motherName !== undefined) student.motherName = updateData.motherName;
-    if (updateData.bloodGroup !== undefined) student.bloodGroup = updateData.bloodGroup;
+    if (updateData.bloodGroup !== undefined) {
+      // Normalize empty string to undefined for optional field
+      student.bloodGroup = updateData.bloodGroup === '' ? undefined : updateData.bloodGroup;
+    }
 
     await student.save();
 

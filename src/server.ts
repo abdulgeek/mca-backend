@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { eventService } from './services/eventService';
 import { initializeAutoLogoutCron, triggerAutoLogout } from './services/autoLogoutService';
+import { initializeHealthCheckPing } from './services/healthCheckPingService';
 import dotenv from 'dotenv';
 
 // Import routes
@@ -125,6 +126,9 @@ const initializeApp = async (): Promise<void> => {
     
     // Initialize auto-logout cron job
     initializeAutoLogoutCron();
+    
+    // Initialize health check ping service (keeps Render.com service active)
+    initializeHealthCheckPing();
   } catch (error) {
     console.error('❌ Face API initialization failed:', error);
     // Don't exit the process, just log the error

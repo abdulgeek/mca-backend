@@ -104,7 +104,7 @@ export const enrollStudent = async (req: Request, res: Response): Promise<void> 
       phone,
       course,
       fatherName,
-      bloodGroup,
+      bloodGroup: bloodGroup && bloodGroup !== '' ? bloodGroup : undefined,
       faceDescriptor: faceDescriptor ? Array.from(faceDescriptor) : undefined,
       faceImage: faceImage || undefined,
       fingerprintCredentialId: fingerprintData?.credentialId,

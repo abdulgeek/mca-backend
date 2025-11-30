@@ -186,6 +186,7 @@ export const markAbsentNoLogin = async (): Promise<MarkAbsentStats> => {
             studentId: student.studentId,
             date: today,
             status: 'absent',
+            timeIn: undefined, // Explicitly set to undefined to prevent default Date.now
             biometricMethod: 'face',
             location: 'Main Campus',
             notes: 'Marked absent at midnight - no login time'
@@ -193,7 +194,7 @@ export const markAbsentNoLogin = async (): Promise<MarkAbsentStats> => {
           // Don't set timeIn for absent records - it's optional when status is 'absent'
           await attendance.save();
           stats.markedAbsent++;
-          console.log(`   ✅ Created: ${student.studentId} - ${student.name}`);
+          console.log(`   ✅ Created absent record: ${student.studentId} - ${student.name}`);
         }
       } catch (error: any) {
         const errorMsg = `Failed to mark absent for ${student.name} (${student.studentId}): ${error.message}`;
