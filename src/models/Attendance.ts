@@ -47,10 +47,23 @@ const attendanceSchema = new Schema<IAttendance>({
   biometricMethod: {
     type: String,
     enum: {
-      values: ['face', 'fingerprint'],
-      message: 'Biometric method must be either face or fingerprint'
+      values: ['face', 'fingerprint', 'external_fingerprint'],
+      message: 'Biometric method must be one of: face, fingerprint, external_fingerprint'
     },
     required: [true, 'Biometric method is required']
+  },
+  fingerprintMode: {
+    type: String,
+    enum: ['webauthn', 'external'],
+    required: false
+  },
+  sensorInfo: {
+    type: {
+      sensorId: String,
+      sensorType: String,
+      quality: Number
+    },
+    required: false
   },
   location: {
     type: String,
@@ -98,6 +111,8 @@ attendanceSchema.index({ date: 1, status: 1 });
 attendanceSchema.index({ studentId: 1, date: 1 });
 attendanceSchema.index({ timeIn: 1 });
 attendanceSchema.index({ location: 1 });
+attendanceSchema.index({ biometricMethod: 1 });
+attendanceSchema.index({ fingerprintMode: 1 });
 
 // Virtual for duration
 attendanceSchema.virtual('duration').get(function() {

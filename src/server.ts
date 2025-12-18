@@ -1,24 +1,25 @@
-import express from 'express';
-import mongoose from 'mongoose';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import rateLimit from 'express-rate-limit';
-import { createServer } from 'http';
-import { eventService } from './services/eventService';
-import { initializeAutoLogoutCron, triggerAutoLogout } from './services/autoLogoutService';
-import { initializeHealthCheckPing } from './services/healthCheckPingService';
-import dotenv from 'dotenv';
+import express from "express";
+import mongoose from "mongoose";
+import cors from "cors";
+import helmet from "helmet";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
+import { createServer } from "http";
+import { eventService } from "./services/eventService";
+import { initializeAutoLogoutCron } from "./services/autoLogoutService";
+import { initializeHealthCheckPing } from "./services/healthCheckPingService";
+import dotenv from "dotenv";
 
 // Import routes
-import faceRecognitionRoutes from './routes/faceRecognition';
-import fingerprintRoutes from './routes/fingerprint';
-import studentRoutes from './routes/students';
-import authRoutes from './routes/auth';
+import faceRecognitionRoutes from "./routes/faceRecognition";
+import fingerprintRoutes from "./routes/fingerprint";
+import sensorRoutes from "./routes/sensors";
+import studentRoutes from "./routes/students";
+import authRoutes from "./routes/auth";
 
 // Import middleware
-import { initializeFaceAPI } from './middleware/faceRecognition';
-import path from 'path';
+import { initializeFaceAPI } from "./middleware/faceRecognition";
+import path from "path";
 
 // Load environment variables
 dotenv.config();
@@ -30,86 +31,94 @@ const server = createServer(app);
 server.timeout = 60000;
 
 // Trust proxy for proper IP detection (only trust first proxy)
-app.set('trust proxy', 1);
+app.set("trust proxy", 1);
 
 // Security middleware - Relaxed for development/open access
-app.use(helmet({
-  contentSecurityPolicy: false, // Disable CSP to allow all connections
-  crossOriginEmbedderPolicy: false,
-  crossOriginOpenerPolicy: false,
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // Disable CSP to allow all connections
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 
 app.use(compression());
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'), // limit each IP to 100 requests per windowMs
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "900000"), // 15 minutes
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || "100"), // limit each IP to 100 requests per windowMs
   message: {
     success: false,
-    message: 'Too many requests from this IP, please try again later.'
+    message: "Too many requests from this IP, please try again later.",
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
 });
 
-app.use('/api/', limiter);
+app.use("/api/", limiter);
 
 // CORS configuration - Allow all origins
-app.use(cors({
-  origin: '*', // Allow all origins
-  credentials: false, // Must be false when origin is '*'
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
-  allowedHeaders: '*', // Allow all headers
-  exposedHeaders: '*', // Expose all headers
-  maxAge: 86400, // Cache preflight requests for 24 hours
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
+app.use(
+  cors({
+    origin: "*", // Allow all origins
+    credentials: false, // Must be false when origin is '*'
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
+    allowedHeaders: "*", // Allow all headers
+    exposedHeaders: "*", // Expose all headers
+    maxAge: 86400, // Cache preflight requests for 24 hours
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  })
+);
 
 // Body parsing middleware
-app.use(express.json({ 
-  limit: process.env.UPLOAD_MAX_SIZE || '50mb',
-  verify: (req, res, buf) => {
-    // Store raw body for signature verification if needed
-    (req as any).rawBody = buf;
-  }
-}));
-app.use(express.urlencoded({ 
-  extended: true, 
-  limit: process.env.UPLOAD_MAX_SIZE || '50mb' 
-}));
+app.use(
+  express.json({
+    limit: process.env.UPLOAD_MAX_SIZE || "50mb",
+    verify: (req, res, buf) => {
+      // Store raw body for signature verification if needed
+      (req as any).rawBody = buf;
+    },
+  })
+);
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: process.env.UPLOAD_MAX_SIZE || "50mb",
+  })
+);
 
 // MongoDB connection
 const connectDB = async (): Promise<void> => {
   try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/attendance-system';
-    
+    const mongoURI =
+      process.env.MONGODB_URI || "mongodb://localhost:27017/attendance-system";
+
     await mongoose.connect(mongoURI, {
       // Remove deprecated options
     });
-    
-    console.log('✅ MongoDB connected successfully');
-    
+
+    console.log("✅ MongoDB connected successfully");
+
     // Handle connection events
-    mongoose.connection.on('error', (err) => {
-      console.error('❌ MongoDB connection error:', err);
+    mongoose.connection.on("error", (err) => {
+      console.error("❌ MongoDB connection error:", err);
     });
-    
-    mongoose.connection.on('disconnected', () => {
-      console.log('⚠️ MongoDB disconnected');
+
+    mongoose.connection.on("disconnected", () => {
+      console.log("⚠️ MongoDB disconnected");
     });
-    
+
     // Graceful shutdown
-    process.on('SIGINT', async () => {
+    process.on("SIGINT", async () => {
       await mongoose.connection.close();
-      console.log('📴 MongoDB connection closed through app termination');
+      console.log("📴 MongoDB connection closed through app termination");
       process.exit(0);
     });
-    
   } catch (error) {
-    console.error('❌ MongoDB connection failed:', error);
+    console.error("❌ MongoDB connection failed:", error);
     process.exit(1);
   }
 };
@@ -118,80 +127,93 @@ const connectDB = async (): Promise<void> => {
 const initializeApp = async (): Promise<void> => {
   try {
     await initializeFaceAPI();
-    console.log('✅ Face API initialized successfully');
-    
+    console.log("✅ Face API initialized successfully");
+
     // Setup event service logging
     eventService.setupLogging();
-    console.log('✅ Event service initialized successfully');
-    
+    console.log("✅ Event service initialized successfully");
+
     // Initialize auto-logout cron job
     initializeAutoLogoutCron();
-    
+
     // Initialize health check ping service (keeps Render.com service active)
     initializeHealthCheckPing();
   } catch (error) {
-    console.error('❌ Face API initialization failed:', error);
+    console.error("❌ Face API initialization failed:", error);
     // Don't exit the process, just log the error
-    console.log('⚠️ Continuing without face recognition (models will be loaded on first request)');
+    console.log(
+      "⚠️ Continuing without face recognition (models will be loaded on first request)"
+    );
   }
 };
 
 // Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/face-recognition', faceRecognitionRoutes);
-app.use('/api/fingerprint', fingerprintRoutes);
-app.use('/api/students', studentRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/face-recognition", faceRecognitionRoutes);
+app.use("/api/fingerprint", fingerprintRoutes);
+app.use("/api/sensors", sensorRoutes);
+app.use("/api/students", studentRoutes);
 
 // Serve Face API models
-app.use('/models', express.static(path.join(__dirname, '../models')));
+app.use("/models", express.static(path.join(__dirname, "../models")));
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({
     success: true,
-    message: 'Server is running...',
+    message: "Server is running...",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || "development",
   });
 });
 
 // Event service for real-time updates
-eventService.on('attendance:marked', (data) => {
-  console.log('📊 Real-time attendance update:', data);
+eventService.on("attendance:marked", (data) => {
+  console.log("📊 Real-time attendance update:", data);
   // Here you can add additional real-time features like SSE or polling endpoints
 });
 
-eventService.on('student:enrolled', (data) => {
-  console.log('👤 Real-time student enrollment:', data);
+eventService.on("student:enrolled", (data) => {
+  console.log("👤 Real-time student enrollment:", data);
 });
 
-eventService.on('system:status', (data) => {
-  console.log('🔧 Real-time system status:', data);
+eventService.on("system:status", (data) => {
+  console.log("🔧 Real-time system status:", data);
 });
 
 // Global error handler
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('❌ Error:', err.stack);
-  
-  const response = {
-    success: false,
-    message: 'Something went wrong!',
-    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error',
-    timestamp: new Date().toISOString()
-  };
-  
-  res.status(err.status || 500).json(response);
-});
+app.use(
+  (
+    err: any,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    console.error("❌ Error:", err.stack);
+
+    const response = {
+      success: false,
+      message: "Something went wrong!",
+      error:
+        process.env.NODE_ENV === "development"
+          ? err.message
+          : "Internal server error",
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(err.status || 500).json(response);
+  }
+);
 
 // 404 handler
-app.use('*', (req, res) => {
+app.use("*", (req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Route not found',
+    message: "Route not found",
     path: req.originalUrl,
     method: req.method,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -202,33 +224,36 @@ const startServer = async (): Promise<void> => {
   try {
     // Connect to database
     await connectDB();
-    
+
     // Initialize face recognition
     await initializeApp();
-    
+
     // Start HTTP server
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
+      console.log(
+        `🌐 Frontend URL: ${
+          process.env.FRONTEND_URL || "http://localhost:3000"
+        }`
+      );
       console.log(`📱 Health check: http://localhost:${PORT}/api/health`);
     });
-    
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    console.error("❌ Failed to start server:", error);
     process.exit(1);
   }
 };
 
 // Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err);
+process.on("uncaughtException", (err) => {
+  console.error("❌ Uncaught Exception:", err);
   process.exit(1);
 });
 
 // Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Rejection:', err);
+process.on("unhandledRejection", (err) => {
+  console.error("❌ Unhandled Rejection:", err);
   process.exit(1);
 });
 

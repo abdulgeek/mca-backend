@@ -99,11 +99,18 @@ const studentSchema = new Schema<IStudent>(
     faceDescriptor: {
       type: [Number],
       required: false,
+      default: undefined, // Explicitly set default to undefined instead of []
       validate: {
-        validator: function (arr: number[]) {
-          return !arr || arr.length === 128;
+        validator: function (arr: number[] | undefined) {
+          // Allow undefined, null, or arrays with exactly 128 elements
+          return (
+            arr === undefined ||
+            arr === null ||
+            (Array.isArray(arr) && (arr.length === 0 || arr.length === 128))
+          );
         },
-        message: "Face descriptor must contain exactly 128 numbers",
+        message:
+          "Face descriptor must be undefined or contain exactly 128 numbers",
       },
     },
     faceImage: {
@@ -127,9 +134,40 @@ const studentSchema = new Schema<IStudent>(
       type: Number,
       default: 0,
     },
+    // External fingerprint sensor fields
+    externalFingerprintTemplate: {
+      type: String,
+      required: false,
+      select: false, // Don't include in default queries for security
+    },
+    externalFingerprintSensorType: {
+      type: String,
+      enum: ["digital_persona", "zkteco", "mantra", "generic_hid"],
+      required: false,
+    },
+    fingerprintMode: {
+      type: String,
+      enum: ["external", "webauthn", "both"],
+      default: "webauthn",
+    },
+    externalFingerprintMetadata: {
+      type: {
+        quality: Number,
+        capturedAt: Date,
+        sensorId: String,
+        templateVersion: String,
+        deviceInfo: {
+          manufacturer: String,
+          model: String,
+          vendorId: Number,
+          productId: Number,
+        },
+      },
+      required: false,
+    },
     biometricMethods: {
       type: [String],
-      enum: ["face", "fingerprint"],
+      enum: ["face", "fingerprint", "external_fingerprint"],
       default: [],
     },
     isActive: {
@@ -155,6 +193,9 @@ studentSchema.index({ phone: 1 });
 studentSchema.index({ faceDescriptor: 1 });
 studentSchema.index({ isActive: 1 });
 studentSchema.index({ course: 1 });
+studentSchema.index({ externalFingerprintTemplate: 1 });
+studentSchema.index({ fingerprintMode: 1 });
+studentSchema.index({ biometricMethods: 1 });
 
 // Virtual for full name
 studentSchema.virtual("fullName").get(function () {
@@ -171,13 +212,39 @@ studentSchema.pre("save", function (next) {
   if (
     this.isNew &&
     (!this.faceDescriptor || this.faceDescriptor.length === 0) &&
-    !this.fingerprintCredentialId
+    !this.fingerprintCredentialId &&
+    !this.externalFingerprintTemplate
   ) {
     return next(
       new Error(
-        "At least one biometric method (face or fingerprint) must be provided"
+        "At least one biometric method (face, fingerprint, or external fingerprint) must be provided"
       )
     );
+  }
+
+  // Update biometric methods array based on enrolled methods
+  if (
+    this.isModified("faceDescriptor") ||
+    this.isModified("fingerprintCredentialId") ||
+    this.isModified("externalFingerprintTemplate")
+  ) {
+    this.biometricMethods = [];
+
+    if (
+      this.faceDescriptor &&
+      Array.isArray(this.faceDescriptor) &&
+      this.faceDescriptor.length === 128
+    ) {
+      this.biometricMethods.push("face");
+    }
+
+    if (this.fingerprintCredentialId) {
+      this.biometricMethods.push("fingerprint");
+    }
+
+    if (this.externalFingerprintTemplate) {
+      this.biometricMethods.push("external_fingerprint");
+    }
   }
 
   next();
